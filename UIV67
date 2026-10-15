@@ -8598,16 +8598,26 @@ do
     Library.CreateWindow = function(self, info)
         local window = OriginalCreateWindow(self, info)
         
-        -- Ajouter CreateTab comme alias de AddTab
+        -- Sauvegarder la méthode originale AddTab
+        local originalAddTab = window.AddTab
+        
+        -- Ajouter CreateTab qui wrapper automatiquement
         function window:CreateTab(name, enabled, icon)
-            return self:AddTab(name, icon or "home")
+            local tab = originalAddTab(self, name, icon or "home")
+            return WrapTab(tab)
+        end
+        
+        -- Remplacer aussi AddTab pour wrapper automatiquement
+        function window:AddTab(name, icon, description)
+            local tab = originalAddTab(self, name, icon, description)
+            return WrapTab(tab)
         end
         
         return window
     end
     
     -- Wrapper pour Tab
-    local function WrapTab(tab)
+    function WrapTab(tab)
         if tab._wrapped then return tab end
         tab._wrapped = true
         
@@ -8631,11 +8641,6 @@ do
             
             -- Wrapper le groupbox
             WrapGroupbox(groupbox)
-            
-            -- Stocker le block (vérifier que la table existe)
-            self._blocks = self._blocks or { Left = {}, Right = {} }
-            self._blocks[side] = self._blocks[side] or {}
-            table.insert(self._blocks[side], groupbox)
             
             return groupbox
         end
@@ -8758,20 +8763,6 @@ do
         end
         
         return groupbox
-    end
-    
-    -- Hook pour wrapper automatiquement les tabs créés
-    local originalAddTab = Library.CreateWindow(Library, {Title = "Temp"}).AddTab
-    if originalAddTab then
-        -- Patch Window:AddTab pour auto-wrapper
-        local mt = getmetatable(Library.CreateWindow(Library, {Title = "Temp"}))
-        if mt and mt.__index then
-            local oldAddTab = mt.__index.AddTab
-            mt.__index.AddTab = function(self, ...)
-                local tab = oldAddTab(self, ...)
-                return WrapTab(tab)
-            end
-        end
     end
 end
 
