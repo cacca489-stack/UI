@@ -8587,4 +8587,199 @@ end
 
 Library.RunExample = RunExample
 
+-- ════════════════════════════════════════════════════════════════════════
+--  WRAPPER DE COMPATIBILITÉ POUR "HELP" API
+--  Permet d'utiliser UIV67 avec la syntaxe CreateTab/CreateBlock/etc.
+-- ════════════════════════════════════════════════════════════════════════
+
+do
+    -- Wrapper pour Window
+    local OriginalCreateWindow = Library.CreateWindow
+    Library.CreateWindow = function(self, info)
+        local window = OriginalCreateWindow(self, info)
+        
+        -- Sauvegarder la méthode originale AddTab
+        local originalAddTab = window.AddTab
+        
+        -- Ajouter CreateTab qui wrapper automatiquement
+        function window:CreateTab(name, enabled, icon)
+            print("[WRAPPER] CreateTab appelé:", name)
+            local tab = originalAddTab(self, name, icon or "home")
+            print("[WRAPPER] Tab créé, wrapping...")
+            local wrappedTab = WrapTab(tab)
+            print("[WRAPPER] Tab wrappé avec succès!")
+            return wrappedTab
+        end
+        
+        -- Remplacer aussi AddTab pour wrapper automatiquement
+        function window:AddTab(name, icon, description)
+            print("[WRAPPER] AddTab appelé:", name)
+            local tab = originalAddTab(self, name, icon, description)
+            return WrapTab(tab)
+        end
+        
+        return window
+    end
+    
+    -- Wrapper pour Tab
+    function WrapTab(tab)
+        print("[WRAPPER] WrapTab début, tab =", tab)
+        if tab._wrapped then 
+            print("[WRAPPER] Tab déjà wrappé!")
+            return tab 
+        end
+        tab._wrapped = true
+        
+        -- Stocker les blocks créés (organisés par Side)
+        tab._blocks = { Left = {}, Right = {} }
+        tab._currentSide = "Left"
+        print("[WRAPPER] Ajout de CreateBlock à tab")
+        
+        function tab:CreateBlock(info)
+            print("[WRAPPER] CreateBlock appelé!")
+            info = info or {}
+            local name = info.Name or "Block"
+            local side = info.Side or self._currentSide
+            local icon = info.ImageID or info.Icon
+            
+            print("[WRAPPER] Création groupbox:", name, "side:", side)
+            
+            -- Créer le groupbox correspondant
+            local groupbox
+            if side == "Left" then
+                groupbox = self:AddLeftGroupbox(name, icon)
+            else
+                groupbox = self:AddRightGroupbox(name, icon)
+            end
+            
+            print("[WRAPPER] Groupbox créé, wrapping...")
+            -- Wrapper le groupbox
+            WrapGroupbox(groupbox)
+            
+            print("[WRAPPER] CreateBlock terminé!")
+            return groupbox
+        end
+        
+        print("[WRAPPER] WrapTab terminé!")
+        return tab
+    end
+    
+    -- Wrapper pour Groupbox (Block)
+    function WrapGroupbox(groupbox)
+        if groupbox._wrapped then return groupbox end
+        groupbox._wrapped = true
+        
+        -- CreateSection -> AddDivider + AddLabel
+        function groupbox:CreateSection(title)
+            self:AddDivider()
+            if title and title ~= "" then
+                self:AddLabel(title)
+            end
+        end
+        
+        -- CreateLabel -> AddLabel
+        function groupbox:CreateLabel(info)
+            if type(info) == "string" then
+                return self:AddLabel(info)
+            elseif type(info) == "table" then
+                return self:AddLabel(info.Text or "")
+            end
+        end
+        
+        -- CreateToggle -> AddToggle
+        function groupbox:CreateToggle(info)
+            info = info or {}
+            local flag = info.Flag or info.Name or "Toggle"
+            return self:AddToggle(flag, {
+                Text = info.Name or info.Text or "Toggle",
+                Default = info.Default or false,
+                Callback = info.Callback or function() end,
+            })
+        end
+        
+        -- CreateButton -> AddButton
+        function groupbox:CreateButton(info)
+            info = info or {}
+            return self:AddButton({
+                Text = info.Name or info.Text or "Button",
+                Func = info.Callback or function() end,
+                DoubleClick = info.DoubleClick,
+            })
+        end
+        
+        -- CreateSlider -> AddSlider
+        function groupbox:CreateSlider(info)
+            info = info or {}
+            local flag = info.Flag or info.Name or "Slider"
+            return self:AddSlider(flag, {
+                Text = info.Name or info.Text or "Slider",
+                Default = info.Default or info.Min or 0,
+                Min = info.Min or 0,
+                Max = info.Max or 100,
+                Rounding = info.Increment or info.Rounding or 1,
+                Callback = info.Callback or function() end,
+                Compact = info.Compact,
+            })
+        end
+        
+        -- CreateDropdown -> AddDropdown
+        function groupbox:CreateDropdown(info)
+            info = info or {}
+            local flag = info.Flag or info.Name or "Dropdown"
+            return self:AddDropdown(flag, {
+                Text = info.Name or info.Text or "Dropdown",
+                Values = info.List or info.Values or {},
+                Default = info.Default,
+                Multi = info.Multi or false,
+                Callback = info.Callback or function() end,
+            })
+        end
+        
+        -- CreateInput -> AddInput
+        function groupbox:CreateInput(info)
+            info = info or {}
+            local flag = info.Flag or info.Name or "Input"
+            return self:AddInput(flag, {
+                Text = info.Name or info.Text or "Input",
+                Default = info.Default or "",
+                Placeholder = info.Placeholder or "",
+                Numeric = info.Numeric or false,
+                Callback = info.Callback or function() end,
+            })
+        end
+        
+        -- CreateCheckbox -> AddCheckbox (alias de AddToggle)
+        function groupbox:CreateCheckbox(info)
+            return self:CreateToggle(info)
+        end
+        
+        -- CreateColorpicker -> AddColorPicker
+        function groupbox:CreateColorpicker(info)
+            info = info or {}
+            -- Note: ColorPicker doit être ajouté à un Toggle ou Label
+            -- On crée un label vide puis on y attache le colorpicker
+            local label = self:AddLabel(info.Name or "Color")
+            local flag = info.Flag or info.Name or "Color"
+            return label:AddColorPicker(flag, {
+                Default = info.Default or Color3.new(1, 1, 1),
+                Callback = info.Callback or function() end,
+            })
+        end
+        
+        -- CreateKeybind -> AddKeyPicker
+        function groupbox:CreateKeybind(info)
+            info = info or {}
+            local label = self:AddLabel(info.Name or "Keybind")
+            local flag = info.Flag or info.Name or "Keybind"
+            return label:AddKeyPicker(flag, {
+                Default = info.Default or "None",
+                Mode = info.Mode or "Toggle",
+                Callback = info.Callback or function() end,
+            })
+        end
+        
+        return groupbox
+    end
+end
+
 return Library
