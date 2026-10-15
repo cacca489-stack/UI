@@ -8612,7 +8612,7 @@ do
         tab._wrapped = true
         
         -- Stocker les blocks créés (organisés par Side)
-        tab._blocks = { Left = {}, Right = {} }
+        tab._blocks = tab._blocks or { Left = {}, Right = {} }
         tab._currentSide = "Left"
         
         function tab:CreateBlock(info)
@@ -8632,7 +8632,9 @@ do
             -- Wrapper le groupbox
             WrapGroupbox(groupbox)
             
-            -- Stocker le block
+            -- Stocker le block (vérifier que la table existe)
+            self._blocks = self._blocks or { Left = {}, Right = {} }
+            self._blocks[side] = self._blocks[side] or {}
             table.insert(self._blocks[side], groupbox)
             
             return groupbox
